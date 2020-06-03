@@ -1,0 +1,8 @@
+*.cmd
+*.symvers
+*.order
+*.mod.*
+*.mod
+*.ko
+*.o
+.dir-locals.el
