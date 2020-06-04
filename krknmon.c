@@ -295,16 +295,15 @@ static const struct hwmon_channel_info *krknmon_chinfo[] = {
 };
 
 static struct hwmon_ops krknmon_hwops = {
- is_visible: krknmon_is_visible,
- read: krknmon_read,
- read_string: krknmon_readstr,
- write: krknmon_write
+	.is_visible  = krknmon_is_visible,
+	.read        = krknmon_read,
+	.read_string = krknmon_readstr,
+	.write       = krknmon_write
 };
 
-static struct hwmon_chip_info krknmon_chip_info =
-{
- ops: &krknmon_hwops,
- info: krknmon_chinfo
+static struct hwmon_chip_info krknmon_chip_info = {
+	.ops  = &krknmon_hwops,
+	.info = krknmon_chinfo
 };
 
 /*
@@ -314,10 +313,10 @@ static struct hwmon_chip_info krknmon_chip_info =
  */
 
 static struct hid_driver krknmon_driver = {
-	.name = "krknmon",
+	.name     = "krknmon",
 	.id_table = krknmon_dev_tbl,
-	.remove = krknmon_remove,
-	.probe = krknmon_probe,
+	.remove   = krknmon_remove,
+	.probe    = krknmon_probe,
 };
 
 module_hid_driver(krknmon_driver);
