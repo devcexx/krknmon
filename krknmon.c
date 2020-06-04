@@ -46,6 +46,7 @@ struct krkn_device {
 
 	long last_pump_rpm;
 	long last_liquid_temp;
+	bool suspended;
 
 	spinlock_t lock;
 };
@@ -68,7 +69,7 @@ static int krknmon_read(struct device *hwmon_dev,
 	struct krkn_device *krdev;
 	unsigned long flags;
 	int r;
-	
+
 	krdev = (struct krkn_device*) dev_get_drvdata(hwmon_dev);
 	r = 0;
 
@@ -130,15 +131,43 @@ static int krknmon_write(struct device *device,
 	return -ENOSYS;
 }
 
+static void krknmon_urb_resubmit(struct krkn_device *krdev)
+{
+	int r;
+
+	switch (r = usb_submit_urb(krdev->urb, GFP_ATOMIC)) {
+	case 0:
+	case -EPERM:		/* Returned if usb_kill_urb is called */
+	case -ENODEV:		/* Returned if device detached */
+	case -ESHUTDOWN:	/* Returned if device has been suspended */
+		break;
+
+	default:
+		hid_err(krdev->hdev, "Unable to resubmit sensor update request. The sensor information might not be updated again unless the module is reloaded. Beware. Error: %d", r);
+	}
+}
+
 static void krknmon_usb_isr(struct urb *urb) {
 	unsigned long flags;
 	struct krkn_device *krdev;
 	u8 *buf;
 	unsigned int pumpspd;
 	unsigned int ltemp;
-	int r;
+	bool suspnd;
 
 	krdev = (struct krkn_device*) urb->context;
+
+	switch (urb->status) {
+	case 0:
+		break;
+	case -ESHUTDOWN:	/* Interface shutted down. Suspended? */
+	case -ECONNRESET:	/* Device unlinked */
+	case -ENOENT:
+		return;		/* Don't resubmit in this cases */
+	default:
+		goto resubmit;
+	}
+
 	buf = krdev->recvbuf;
 
 	pumpspd = (buf[18] << 8) | buf[17];
@@ -148,15 +177,56 @@ static void krknmon_usb_isr(struct urb *urb) {
 
 	krdev->last_liquid_temp = ltemp;
 	krdev->last_pump_rpm = pumpspd;
+	suspnd = krdev->suspended;
 
 	spin_unlock_irqrestore(&krdev->lock, flags);
 
-	//EPERM errors are produced by a call to usb_kill_urb. Ignore them.
-	//ENODEV errors are most likely produced by a disconnection of the
-	//device. Ignore too.
-	if ((r = usb_submit_urb(urb, GFP_ATOMIC)) && r != -EPERM && r != -ENODEV)
-		hid_err(krdev->hdev, "Unable to resubmit sensor update request. The sensor information might not be updated again unless the module is reloaded. Beware.");
+	if (suspnd) {
+		return;
+	}
+
+ resubmit:
+	krknmon_urb_resubmit(krdev);
 }
+
+#ifdef CONFIG_PM
+static int krknmon_suspend(struct hid_device *hdev, pm_message_t msg)
+{
+	struct krkn_device *krdev;
+	unsigned long flags;
+
+	krdev = hid_get_drvdata(hdev);
+
+	if (PMSG_IS_AUTO(msg)) {
+		// Just for debug, I still not sure about how autosuspend works.
+		hid_err(hdev, "Attempt to autosuspend device. This must not happen");
+	} else {
+		hid_info(hdev, "Device suspended");
+
+		spin_lock_irqsave(&krdev->lock, flags);
+		krdev->suspended = true;
+		spin_unlock_irqrestore(&krdev->lock, flags);
+		usb_kill_urb(krdev->urb);
+	}
+	return 0;
+}
+
+static int krknmon_resume(struct hid_device *hdev)
+{
+		struct krkn_device *krdev;
+	unsigned long flags;
+
+	krdev = hid_get_drvdata(hdev);
+	spin_lock_irqsave(&krdev->lock, flags);
+	krdev->suspended = false;
+	spin_unlock_irqrestore(&krdev->lock, flags);
+
+	hid_info(hdev, "Device resumed");
+
+	krknmon_urb_resubmit(krdev);
+	return 0;
+}
+#endif	/* CONFIG_PM */
 
 static int krknmon_probe(struct hid_device *hdev,
 			const struct hid_device_id *id)
@@ -235,6 +305,9 @@ static int krknmon_probe(struct hid_device *hdev,
 	krdev->hwmon_dev = hwmon_dev;
 	krdev->usb_dev = usb_dev;
 	spin_lock_init(&krdev->lock);
+
+	if (IS_ENABLED(CONFIG_PM))
+		usb_disable_autosuspend(usb_dev);
 
 	// Fill and submit first USB URB.
 	usb_fill_int_urb(inturb, usb_dev, pipe, krdev->recvbuf,
@@ -317,6 +390,10 @@ static struct hid_driver krknmon_driver = {
 	.id_table = krknmon_dev_tbl,
 	.remove   = krknmon_remove,
 	.probe    = krknmon_probe,
+#ifdef CONFIG_PM
+	.suspend  = krknmon_suspend,
+	.resume   = krknmon_resume
+#endif
 };
 
 module_hid_driver(krknmon_driver);
