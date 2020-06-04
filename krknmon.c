@@ -283,12 +283,21 @@ static int krknmon_probe(struct hid_device *hdev,
 		goto error;
 	}
 
+	// Init HID device and hidraw connection
+	if (hid_parse(hdev)) {
+		goto error;
+	}
+
+	if (hid_hw_start(hdev, HID_CONNECT_HIDRAW)) {
+		goto error_clhid;
+	}
+
 	if ((krdev->recvbuf = usb_alloc_coherent(
 				usb_dev, DEV_RECVBUFSZ, GFP_KERNEL,
 				&krdev->recvbuf_dma)) == NULL) {
 
 		err = -ENOMEM;
-		goto error;
+		goto error_clhid;
 	}
 
 	inturb = usb_alloc_urb(0, GFP_KERNEL);
@@ -321,7 +330,7 @@ static int krknmon_probe(struct hid_device *hdev,
 		goto error_clurb;
 	}
 
-	hid_info(hdev, "%s: Successfully probed device.", dev_name(hwmon_dev));
+	hid_info(hdev, "%s: Successfully probed device %s.", dev_name(hwmon_dev), hdev->name);
 
 	return 0;
 
@@ -331,6 +340,9 @@ static int krknmon_probe(struct hid_device *hdev,
  error_clrecv:
 	usb_free_coherent(usb_dev, DEV_RECVBUFSZ, krdev->recvbuf,
 			krdev->recvbuf_dma);
+
+ error_clhid:
+	hid_hw_stop(hdev);
 
  error:
 	kfree(krdev);
@@ -350,6 +362,7 @@ static void krknmon_remove(struct hid_device *hdev)
 			krdev->recvbuf_dma);
 	kfree(krdev);
 
+	hid_hw_stop(hdev);
 	hid_info(hdev, "Device released.");
 }
 

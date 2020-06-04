@@ -19,10 +19,18 @@ generation, such as X53 and X73, but this is far from being
 guaranteed. This module is **not** compatible with older devices (X52,
 X62, X72).
 
-Note also that, this device uses the same USB interface for both
-reporting the status and setting aesthetics like color effects and
-that stuff, when this module is loaded, you won't be able to use any
-other program to communicate with it (for example, [liquidctl](https://github.com/jonasmalacofilho/liquidctl)).
+This module may _partially_ work with other third-party projects for
+controlling other aspects of the device such the LED ilumination
+(tested with
+[liquidctl](https://github.com/jonasmalacofilho/liquidctl)). This is
+because the hidraw endpoint of the device is connected even when the
+module is working, for allowing this tools to work. It has been
+observed that some operations like the initialization of the device
+that the liquidctl project does, might give some issues with the
+module (still investigating), so it is recommended only use this other
+projects for accessing the device for doing operations that the module
+does not support (seems to work fine for changing leds and that suff
+anyway).
 
 ## License
 
