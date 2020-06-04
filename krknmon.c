@@ -33,6 +33,8 @@
 
 #define DEV_RECVBUFSZ 64
 
+static struct hwmon_chip_info krknmon_chip_info;
+
 struct krkn_device {
 	struct hid_device *hdev;
 	struct device *hwmon_dev;
@@ -127,28 +129,6 @@ static int krknmon_write(struct device *device,
 	// TODO Not implemented yet.
 	return -ENOSYS;
 }
-
-static const struct hwmon_channel_info *krknmon_chinfo[] = {
-	HWMON_CHANNEL_INFO(temp, HWMON_T_LABEL | HWMON_T_CRIT | HWMON_T_MAX |
-			HWMON_T_INPUT),
-
-	HWMON_CHANNEL_INFO(fan, HWMON_F_LABEL | HWMON_F_INPUT),
-	HWMON_CHANNEL_INFO(pwm, HWMON_PWM_INPUT),
-	NULL
-};
-
-static struct hwmon_ops krknmon_hwops = {
- is_visible: krknmon_is_visible,
- read: krknmon_read,
- read_string: krknmon_readstr,
- write: krknmon_write
-};
-
-static struct hwmon_chip_info krknmon_chip_info =
-{
- ops: &krknmon_hwops,
- info: krknmon_chinfo
-};
 
 static void krknmon_usb_isr(struct urb *urb) {
 	unsigned long flags;
@@ -303,6 +283,28 @@ static void krknmon_remove(struct hid_device *hdev)
 static struct hid_device_id krknmon_dev_tbl[] = {
 	{ HID_USB_DEVICE(0x1e71, 0x2007) },
 	{ }
+};
+
+static const struct hwmon_channel_info *krknmon_chinfo[] = {
+	HWMON_CHANNEL_INFO(temp, HWMON_T_LABEL | HWMON_T_CRIT | HWMON_T_MAX |
+			HWMON_T_INPUT),
+
+	HWMON_CHANNEL_INFO(fan, HWMON_F_LABEL | HWMON_F_INPUT),
+	HWMON_CHANNEL_INFO(pwm, HWMON_PWM_INPUT),
+	NULL
+};
+
+static struct hwmon_ops krknmon_hwops = {
+ is_visible: krknmon_is_visible,
+ read: krknmon_read,
+ read_string: krknmon_readstr,
+ write: krknmon_write
+};
+
+static struct hwmon_chip_info krknmon_chip_info =
+{
+ ops: &krknmon_hwops,
+ info: krknmon_chinfo
 };
 
 /*
