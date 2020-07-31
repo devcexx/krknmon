@@ -1,11 +1,12 @@
 VERSION		:= 0.1
 DKMS_INS_PATH	:= /usr/src/krknmon-$(VERSION)
+TARGET          := $(shell uname -r)
 obj-m 		+= krknmon.o
 
 build:
-	make -C /lib/modules/$(shell uname -r)/build M=$(shell pwd) modules
+	make -C /lib/modules/$(TARGET)/build M=$(shell pwd) modules
 clean:
-	make -C /lib/modules/$(shell uname -r)/build M=$(shell pwd) clean
+	make -C /lib/modules/$(TARGET)/build M=$(shell pwd) clean
 
 dkms-install:
 	mkdir $(DKMS_INS_PATH)
