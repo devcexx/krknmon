@@ -127,8 +127,46 @@ static int krknmon_write(struct device *device,
 			enum hwmon_sensor_types type,
 			u32 attr, int channel, long val)
 {
-	// TODO Not implemented yet.
-	return -ENOSYS;
+	int r;
+	int i;
+	uint64_t value;
+	struct krkn_device *krdev;
+	char *buf;
+	uint64_t *buf64;
+
+	krdev = (struct krkn_device*) dev_get_drvdata(device);
+	buf = kcalloc(DEV_RECVBUFSZ, 1, GFP_KERNEL);
+	buf64 = (uint64_t*) &buf[4];
+
+	if (val < 0 || val > 255) {
+		return -EINVAL;
+	}
+	val = (100 * val) / 255; /* Scale between 0 and 100 */
+
+	value = (val << 8) | val;
+	value |= value << 16;
+	value |= value << 32;
+
+	buf[0] = 0x72; /* Header */
+	buf[1] = 0x1;  /* Speed control address (this device has only one) */
+
+	for (i = 0; i < 5; i++) {
+		buf64[i] = value;
+	}
+
+	if ((r = hid_hw_output_report(krdev->hdev, buf, DEV_RECVBUFSZ)) < 0) {
+		goto clean;
+	}
+
+	if (r != DEV_RECVBUFSZ) {
+		hid_warn(krdev->hdev, "Expected to write %d bytes into device, but %d were written.", DEV_RECVBUFSZ, r);
+	}
+
+	r = 0;
+
+ clean:
+	kfree(buf);
+	return r;
 }
 
 static void krknmon_urb_resubmit(struct krkn_device *krdev)
