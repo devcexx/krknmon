@@ -52,8 +52,8 @@ struct krkn_device {
 };
 
 static umode_t krknmon_is_visible(const void *drvdata,
-					enum hwmon_sensor_types type,
-					u32 attr, int channel)
+				enum hwmon_sensor_types type,
+				u32 attr, int channel)
 {
 	if (type == hwmon_pwm && attr == hwmon_pwm_input) {
 		return 0644;
@@ -213,7 +213,7 @@ static int krknmon_suspend(struct hid_device *hdev, pm_message_t msg)
 
 static int krknmon_resume(struct hid_device *hdev)
 {
-		struct krkn_device *krdev;
+	struct krkn_device *krdev;
 	unsigned long flags;
 
 	krdev = hid_get_drvdata(hdev);
