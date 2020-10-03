@@ -44,8 +44,9 @@ struct krkn_device {
 	u8 *recvbuf;
 	dma_addr_t recvbuf_dma;
 
-	long last_pump_rpm;
-	long last_liquid_temp;
+	int last_pump_rpm;
+	int last_pump_duty;
+	int last_liquid_temp;
 	bool suspended;
 
 	spinlock_t lock;
@@ -94,6 +95,12 @@ static int krknmon_read(struct device *hwmon_dev,
 	case hwmon_fan:
 		spin_lock_irqsave(&krdev->lock, flags);
 		*ret = krdev->last_pump_rpm;
+		spin_unlock_irqrestore(&krdev->lock, flags);
+		break;
+
+	case hwmon_pwm:
+		spin_lock_irqsave(&krdev->lock, flags);
+		*ret = (krdev->last_pump_duty * 255) / 100;
 		spin_unlock_irqrestore(&krdev->lock, flags);
 		break;
 
@@ -190,6 +197,7 @@ static void krknmon_usb_isr(struct urb *urb) {
 	struct krkn_device *krdev;
 	u8 *buf;
 	unsigned int pumpspd;
+	unsigned int pumpduty;
 	unsigned int ltemp;
 	bool suspnd;
 
@@ -209,12 +217,14 @@ static void krknmon_usb_isr(struct urb *urb) {
 	buf = krdev->recvbuf;
 
 	pumpspd = (buf[18] << 8) | buf[17];
+	pumpduty = buf[19];
 	ltemp = buf[15] * 1000 + buf[16] * 100;
 
 	spin_lock_irqsave(&krdev->lock, flags);
 
 	krdev->last_liquid_temp = ltemp;
 	krdev->last_pump_rpm = pumpspd;
+	krdev->last_pump_duty = pumpduty;
 	suspnd = krdev->suspended;
 
 	spin_unlock_irqrestore(&krdev->lock, flags);

@@ -1,4 +1,4 @@
-VERSION		:= 0.2
+VERSION		:= 0.3
 DKMS_INS_PATH	:= $(ROOTDIR)/usr/src/krknmon-$(VERSION)
 TARGET          := $(shell uname -r)
 obj-m 		+= krknmon.o
