@@ -1,5 +1,5 @@
-VERSION		:= 0.1
-DKMS_INS_PATH	:= /usr/src/krknmon-$(VERSION)
+VERSION		:= 0.2
+DKMS_INS_PATH	:= $(ROOTDIR)/usr/src/krknmon-$(VERSION)
 TARGET          := $(shell uname -r)
 obj-m 		+= krknmon.o
 
@@ -8,17 +8,17 @@ build:
 clean:
 	make -C /lib/modules/$(TARGET)/build M=$(shell pwd) clean
 
-dkms-install:
-	mkdir $(DKMS_INS_PATH)
+install:
+	mkdir -p $(DKMS_INS_PATH)
 	cp dkms.conf krknmon.c Makefile $(DKMS_INS_PATH)
+
+dkms-install: install
 	dkms add krknmon/$(VERSION)
 	dkms build krknmon/$(VERSION)
 	dkms install krknmon/$(VERSION)
 
-install: dkms-install
-
 dkms-remove:
 	dkms remove krknmon/$(VERSION) --all
-	rm -rf $(DKMS_INS_PATH)
-	
+
 uninstall: dkms-remove
+	rm -rf $(DKMS_INS_PATH)
