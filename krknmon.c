@@ -312,7 +312,7 @@ static int krknmon_probe(struct hid_device *hdev,
 
 	pipe = usb_rcvintpipe(usb_dev, usb_endp->bEndpointAddress);
 
-	if ((recvsz = usb_maxpacket(usb_dev, pipe, 0)) != DEV_RECVBUFSZ) {
+	if ((recvsz = usb_maxpacket(usb_dev, pipe)) != DEV_RECVBUFSZ) {
 		hid_err(hdev, "Expected USB endpoint to have a max packet size of %d, but got %d.",
 			DEV_RECVBUFSZ, recvsz);
 		return -ENODEV;
