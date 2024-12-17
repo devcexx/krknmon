@@ -26,7 +26,7 @@
 #define pr_fmt(fmt)	KBUILD_MODNAME ": " fmt
 #define STR_PROBE_ERROR "Failed to probe device: "
 
-// Recommended by the recommendations of the manufacturer.
+// Recommended by the manufacturer.
 // See https://blog.nzxt.com/does-aio-liquid-evaporate/
 #define KRKN_TEMP_CRIT 60000
 #define KRKN_TEMP_MAX 58000
@@ -48,8 +48,6 @@ struct krkn_device {
 	int last_pump_duty;
 	int last_liquid_temp;
 	bool suspended;
-
-	spinlock_t lock;
 };
 
 static umode_t krknmon_is_visible(const void *drvdata,
@@ -68,7 +66,6 @@ static int krknmon_read(struct device *hwmon_dev,
 			u32 attr, int channel, long *ret)
 {
 	struct krkn_device *krdev;
-	unsigned long flags;
 	int r;
 
 	krdev = (struct krkn_device*) dev_get_drvdata(hwmon_dev);
@@ -84,24 +81,18 @@ static int krknmon_read(struct device *hwmon_dev,
 			*ret = KRKN_TEMP_MAX;
 			break;
 		case hwmon_temp_input:
-			spin_lock_irqsave(&krdev->lock, flags);
-			*ret = krdev->last_liquid_temp;
-			spin_unlock_irqrestore(&krdev->lock, flags);
+			*ret = READ_ONCE(krdev->last_liquid_temp);
 			break;
 		default:
 			r = -EOPNOTSUPP;
 		}
 		break;
 	case hwmon_fan:
-		spin_lock_irqsave(&krdev->lock, flags);
-		*ret = krdev->last_pump_rpm;
-		spin_unlock_irqrestore(&krdev->lock, flags);
+		*ret = READ_ONCE(krdev->last_pump_rpm);
 		break;
 
 	case hwmon_pwm:
-		spin_lock_irqsave(&krdev->lock, flags);
-		*ret = (krdev->last_pump_duty * 255) / 100;
-		spin_unlock_irqrestore(&krdev->lock, flags);
+		*ret = READ_ONCE(krdev->last_pump_duty) * 255 / 100;
 		break;
 
 	default:
@@ -192,8 +183,8 @@ static void krknmon_urb_resubmit(struct krkn_device *krdev)
 	}
 }
 
-static void krknmon_usb_isr(struct urb *urb) {
-	unsigned long flags;
+static void krknmon_usb_isr(struct urb *urb)
+{
 	struct krkn_device *krdev;
 	u8 *buf;
 	unsigned int pumpspd;
@@ -220,14 +211,10 @@ static void krknmon_usb_isr(struct urb *urb) {
 	pumpduty = buf[19];
 	ltemp = buf[15] * 1000 + buf[16] * 100;
 
-	spin_lock_irqsave(&krdev->lock, flags);
-
-	krdev->last_liquid_temp = ltemp;
-	krdev->last_pump_rpm = pumpspd;
-	krdev->last_pump_duty = pumpduty;
-	suspnd = krdev->suspended;
-
-	spin_unlock_irqrestore(&krdev->lock, flags);
+	WRITE_ONCE(krdev->last_liquid_temp, ltemp);
+	WRITE_ONCE(krdev->last_pump_rpm, pumpspd);
+	WRITE_ONCE(krdev->last_pump_duty, pumpduty);
+	suspnd = READ_ONCE(krdev->suspended);
 
 	if (suspnd) {
 		return;
@@ -241,7 +228,6 @@ static void krknmon_usb_isr(struct urb *urb) {
 static int krknmon_suspend(struct hid_device *hdev, pm_message_t msg)
 {
 	struct krkn_device *krdev;
-	unsigned long flags;
 
 	krdev = hid_get_drvdata(hdev);
 
@@ -250,10 +236,7 @@ static int krknmon_suspend(struct hid_device *hdev, pm_message_t msg)
 		hid_err(hdev, "Attempt to autosuspend device. This must not happen");
 	} else {
 		hid_info(hdev, "Device suspended");
-
-		spin_lock_irqsave(&krdev->lock, flags);
-		krdev->suspended = true;
-		spin_unlock_irqrestore(&krdev->lock, flags);
+		WRITE_ONCE(krdev->suspended, true);
 		usb_kill_urb(krdev->urb);
 	}
 	return 0;
@@ -262,12 +245,9 @@ static int krknmon_suspend(struct hid_device *hdev, pm_message_t msg)
 static int krknmon_resume(struct hid_device *hdev)
 {
 	struct krkn_device *krdev;
-	unsigned long flags;
 
 	krdev = hid_get_drvdata(hdev);
-	spin_lock_irqsave(&krdev->lock, flags);
-	krdev->suspended = false;
-	spin_unlock_irqrestore(&krdev->lock, flags);
+	WRITE_ONCE(krdev->suspended, false);
 
 	hid_info(hdev, "Device resumed");
 
@@ -361,7 +341,6 @@ static int krknmon_probe(struct hid_device *hdev,
 	krdev->hdev = hdev;
 	krdev->hwmon_dev = hwmon_dev;
 	krdev->usb_dev = usb_dev;
-	spin_lock_init(&krdev->lock);
 
 	if (IS_ENABLED(CONFIG_PM))
 		usb_disable_autosuspend(usb_dev);
@@ -458,7 +437,7 @@ static struct hid_driver krknmon_driver = {
 };
 
 module_hid_driver(krknmon_driver);
-MODULE_VERSION("0.1");
+MODULE_VERSION("0.4");
 MODULE_AUTHOR("devcexx");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("NZXT Kraken 4th generation AIO cooler (X53, X63, X73) HWMon driver");
